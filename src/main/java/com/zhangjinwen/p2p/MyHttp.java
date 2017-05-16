@@ -10,6 +10,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
 public class MyHttp {
 	private String host;
 	private int port;
@@ -23,6 +26,10 @@ public class MyHttp {
 	private UserItem[] users =null;
 	private String user;
 	private String conn;
+	
+	private static final int CODE_SUCCESS=1;
+	private static final int CODE_ERROR=-1;
+	
 	public static void main(String[] args) {
 		String host = "101game.esy.es";
 		int port = 80;
@@ -42,23 +49,30 @@ public class MyHttp {
 		http.user=user;
 		http.conn=conn;
 		try {
-			System.out.println(http.getResult(url));
-			System.out.println(http.localPort);
-			System.out.println(http.localAddress);
+			 
+			Log.info("连接master port："+http.localPort);
+			Log.info("连接master address："+http.localAddress);
             while(true){
-            	String result=http.getResult(url);
-            	UserItem[] items =http.getIps(result);
+            	String resultText=http.getResult(url);
+            	Log.info("master  url："+url);
+            	Log.info("master  text："+resultText);
+            	Gson gson = new Gson();
+            	JsonObject result = gson.fromJson(resultText,JsonObject.class);
+            	if(result.get("code").getAsInt()!=CODE_SUCCESS){
+            		Log.info("master  response error："+resultText);
+            		sleepWait();
+            		continue;
+            	}
+            	UserItem[] items =http.getIps(result.get("ips").getAsString());
             	if(items!=null&&items.length==2){
             		http.users=items;
             		UserItem other=	http.getOther();
                 	if(other==null)throw new RuntimeException("获取其它用户失败");
             	}
             	
-    			try {
-					Thread.sleep(500);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
+            	//{"code":1,"msg":"success insert","ips":"zjwTest:180.168.91.190:18562_"}
+            	
+    			sleepWait();
             }
 			/*new Thread(){
 				public void run(){
@@ -78,6 +92,14 @@ public class MyHttp {
 		http.close();
 
 	}
+
+	private static void sleepWait() {
+		try {
+			Thread.sleep(500);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
 	
 	private UserItem getOther() {
 	 for( UserItem u: users){
@@ -88,20 +110,13 @@ public class MyHttp {
 		return null;
 	}
 
-	private  UserItem[] getIps(String result){
-		System.out.println("getIps:"+result);
-		String ipSp="\"ips\":";
-		int ipsIndex = result.indexOf(ipSp);
-		if(ipsIndex!=-1){
-			String ips=result.substring(ipsIndex+ipSp.length());
-			ips=ips.substring(1, ips.length()-2);
-			String[] clients = ips.split("_");
-			if(clients.length==2&&clients[0].trim().length()>0&&clients[1].trim().length()>0){
-				UserItem item1 = getIp(clients[0]);
-				UserItem item2 = getIp(clients[1]);
-				if(item1!=null&&item2!=null){
-					return new UserItem[]{item1,item2};
-				}
+	private  UserItem[] getIps(String ips){
+		String[] clients = ips.split("_");
+		if(clients.length==2&&clients[0].trim().length()>0&&clients[1].trim().length()>0){
+			UserItem item1 = getIp(clients[0]);
+			UserItem item2 = getIp(clients[1]);
+			if(item1!=null&&item2!=null){
+				return new UserItem[]{item1,item2};
 			}
 		}
 		return null;
@@ -113,7 +128,8 @@ public class MyHttp {
 		if(ups1.length==3){
 			String user=ups1[0];
 			String ip=ups1[1];
-			int port=Integer.parseInt(ups1[2]);
+			String portStr=ups1[2];
+			int port=Integer.parseInt(portStr);
 			UserItem ui=new UserItem();
 			ui.user=user;
 			ui.ip=ip;
